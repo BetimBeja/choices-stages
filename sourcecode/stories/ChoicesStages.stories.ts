@@ -4,7 +4,7 @@ import type {
   IOutputs,
 } from "../ChoicesStages/generated/ManifestTypes";
 
-import { useArgs } from "@storybook/client-api";
+import { useArgs } from "@storybook/preview-api";
 
 import {
   ComponentFrameworkMockGenerator,
@@ -22,31 +22,11 @@ interface StoryArgs {
   choice: number;
 }
 
-export default {
-  title: "ChoicesStages Component",
-  argTypes: {
-    isDisabled: { control: "boolean" },
-    isVisible: { control: "boolean" },
-    choice: {
-      options: [0, 1, 2],
-      control: {
-        type: "select",
-        labels: {
-          0: "Start",
-          1: "Middle",
-          2: "End",
-        },
-      },
-    },
-  },
-  args: {
-    isDisabled: false,
-    isVisible: true,
-    choice: 0,
-  },
-  decorators: [
-    (Story) => {
-      var container = document.createElement("div");
+const rootContainer: () => Meta<StoryArgs>["decorators"] = () => {
+  let container: HTMLDivElement | undefined;
+  return (Story, context) => {
+    if (!container) {
+      container = document.createElement("div");
       container.style.margin = "2em";
       container.style.padding = "1em";
       container.style.width = "640px";
@@ -54,26 +34,25 @@ export default {
       container.style.border = "dotted 1px";
       container.style.resize = "both";
       container.style.overflow = "auto";
+      context.parameters["pcf"] = context.parameters["pcf"] || {};
+      context.parameters["pcf"].container = container;
+    }
+    Story();
+    return container;
+  };
+};
 
-      var storyResult = Story();
-      if (typeof storyResult == "string") {
-        container.innerHTML = storyResult;
-      } else {
-        container.appendChild(storyResult);
-      }
-      return container;
-    },
-  ],
-} as Meta<StoryArgs>;
-
-const renderGenerator = () => {
-  let container: HTMLDivElement;
-  let mockGenerator: ComponentFrameworkMockGenerator<IInputs, IOutputs>;
-
-  return function () {
+const generatorInit: () => Meta<StoryArgs>["decorators"] = () => {
+  let mockGenerator:
+    | ComponentFrameworkMockGenerator<IInputs, IOutputs>
+    | undefined;
+  return (Story, context) => {
     const [args, updateArgs] = useArgs<StoryArgs>();
-    if (!container) {
-      container = document.createElement("div");
+    const rootContainer = context.parameters["pcf"]
+      ?.container as HTMLDivElement;
+    if (!mockGenerator) {
+      const container = document.createElement("div");
+      rootContainer.appendChild(container);
       mockGenerator = new ComponentFrameworkMockGenerator(
         Component,
         {
@@ -114,27 +93,62 @@ const renderGenerator = () => {
         Choice: args.choice,
       });
 
-      mockGenerator.onOutputChanged.callsFake(() => {
-        mockGenerator.context._parameters.Choice._Refresh();
-        let choice = mockGenerator.context._parameters.Choice.raw as number;
+      mockGenerator.onOutputChanged.callsFake(({ Choice: choice }) => {
         updateArgs({ choice });
       });
 
       mockGenerator.ExecuteInit();
+      context.parameters["pcf"] = context.parameters["pcf"] || {};
+      context.parameters["pcf"].mockGenerator = mockGenerator;
     }
-
-    if (mockGenerator) {
-      mockGenerator.context.mode.isVisible = args.isVisible;
-      mockGenerator.context.mode.isControlDisabled = args.isDisabled;
-      mockGenerator.context._parameters.Choice._SetValue(args.choice);
-      mockGenerator.ExecuteUpdateView();
-    }
-
-    return container;
+    Story();
+    return rootContainer;
   };
 };
 
+export default {
+  title: "ChoicesStages Component",
+  argTypes: {
+    choice: {
+      options: [0, 1, 2],
+      control: {
+        type: "select",
+        labels: {
+          0: "Start",
+          1: "Middle",
+          2: "End",
+        },
+      },
+    },
+    isDisabled: { name: "Disabled", control: "boolean" },
+    isVisible: { name: "Visible", control: "boolean" },
+  },
+  args: {
+    choice: 0,
+    isDisabled: false,
+    isVisible: true,
+  },
+  render: () => "",
+  decorators: [
+    (Story, context) => {
+      const rootContainer = context.parameters["pcf"]
+        ?.container as HTMLDivElement;
+      const mockGenerator = context.parameters["pcf"]
+        ?.mockGenerator as ComponentFrameworkMockGenerator<IInputs, IOutputs>;
+      if (mockGenerator) {
+        mockGenerator.context.mode.isVisible = context.args.isVisible;
+        mockGenerator.context.mode.isControlDisabled = context.args.isDisabled;
+        mockGenerator.context._parameters.Choice._SetValue(context.args.choice);
+        mockGenerator.ExecuteUpdateView();
+      }
+      Story();
+      return rootContainer;
+    },
+    generatorInit(),
+    rootContainer(),
+  ],
+} as Meta<StoryArgs>;
+
 export const ChoicesStagesComponent = {
-  render: renderGenerator(),
   parameters: { controls: { expanded: true } },
 } as StoryObj<StoryArgs>;
