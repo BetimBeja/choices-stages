@@ -9,7 +9,9 @@ const config: StorybookConfig = {
     "@storybook/addon-links",
     "@storybook/addon-essentials",
     "@storybook/addon-interactions",
+    "@storybook/addon-webpack5-compiler-babel",
   ],
+  staticDirs: ["./public"],
   framework: {
     name: "@storybook/html-webpack5",
     options: {},
